@@ -16,8 +16,8 @@ Config (all optional locally, see `.env.example`): `MONGODB_URI` (without it not
 
 ## Protocol (client `src/systems/net.js`)
 
-Room: `world` (`joinOrCreate("world", { userId, username, avatar })`), no player cap (Colyseus default).
-Each player gets one of the 6 home plots; beyond 6 players, plots are shared.
+Room: `world` (`joinOrCreate("world", { userId, username, avatar })`), max 6 players per room, one per home plot;
+extra players get a new room.
 
 | Client → server | Purpose |
 | --- | --- |

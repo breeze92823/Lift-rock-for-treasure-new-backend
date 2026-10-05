@@ -6,6 +6,8 @@ import {
   LEADERBOARD_ROWS,
   PLAYTIME_FLUSH_MS,
   PLOT_COUNT,
+  ROOM_MAX_CLIENTS,
+  plotSpawn,
   LEVEL_MAX,
   REBIRTH_MAX,
   AURA_IDS,
@@ -47,12 +49,13 @@ function sanitizeAvatar(raw: unknown): string {
 
 /**
  * Room every client joins via `client.joinOrCreate("world", { userId, username, avatar })`.
- * Each player gets a home plot (PLOT_COUNT of them); beyond that, plots are shared.
+ * Seats one player per home plot (PLOT_COUNT = 6); extra players are put in a fresh room.
  * Clients report their state (the game is client-authoritative); this room stores it,
  * relays poses/appearance/plot contents to the others and broadcasts the leaderboards.
  */
 export class WorldRoom extends Room<{ state: WorldState }> {
   state = new WorldState();
+  maxClients = ROOM_MAX_CLIENTS;
 
   // sessionId -> user id (Bloxity id or client guest id). Deliberately NOT part of WorldState:
   // it only gates this room's own Mongo reads/writes.
@@ -62,6 +65,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   // current identity; cleared when the identity changes so the reply is re-sent.
   private plotted = new Set<string>();
 
+  // sessionIds that have sent a position (so a late plot assignment never yanks them back to spawn).
+  private moved = new Set<string>();
+
   // sessionId -> epoch ms up to which that connection's playtime has already been counted.
   private playTimeMark = new Map<string, number>();
 
@@ -70,6 +76,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     move: (client: Client, msg: any) => {
       const p = this.state.players.get(client.sessionId);
       if (!p) return;
+      if (finite(msg?.x) || finite(msg?.z)) this.moved.add(client.sessionId);
       if (finite(msg?.x)) p.x = msg.x;
       if (finite(msg?.y)) p.y = msg.y;
       if (finite(msg?.z)) p.z = msg.z;
@@ -181,8 +188,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   // Lowest free plot, preferring `wanted` (the plot saved on the player's document) if nobody
-  // else in this room holds it. The room has no player cap, so once all plots are taken the
-  // least-shared one is reused.
+  // else in this room holds it. maxClients == PLOT_COUNT, so one is always free
+  // (the least-shared fallback is only a safety net).
   private claimPlot(sessionId: string, wanted: number | null): number {
     const counts = new Array<number>(PLOT_COUNT).fill(0);
     this.state.players.forEach((other, sid) => {
@@ -227,6 +234,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.state.players.delete(sessionId);
     this.userIds.delete(sessionId);
     this.plotted.delete(sessionId);
+    this.moved.delete(sessionId);
   }
 
   onJoin(client: Client, options?: { username?: string; userId?: string; avatar?: string }) {
@@ -298,6 +306,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
     p.homePlot = this.claimPlot(client.sessionId, sanitizePlot(doc?.homePlot));
     this.plotted.add(client.sessionId);
+    // Not moved yet: show them at their plot spawn instead of the world origin.
+    if (!this.moved.has(client.sessionId)) {
+      const s = plotSpawn(p.homePlot);
+      p.x = s.x;
+      p.y = s.y;
+      p.z = s.z;
+    }
 
     if (!doc) {
       client.send("noProgress", { homePlot: p.homePlot });
