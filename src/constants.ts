@@ -7,6 +7,13 @@ export const LEADERBOARD_ROWS = 10;
 // Playtime: how often each connected player's elapsed time is added to their total.
 export const PLAYTIME_FLUSH_MS = 30_000;
 
+// Offline earnings: time away (measured by the SERVER clock) pays out per hour, pro-rated by the
+// second. Shorter absences than the minimum pay nothing; the unclaimed total stops growing at the cap.
+export const OFFLINE_CASH_PER_HOUR = 500;
+export const OFFLINE_STRENGTH_PER_HOUR = 100;
+export const OFFLINE_MIN_SECONDS = 60;
+export const OFFLINE_MAX_SECONDS = 12 * 3600;
+
 // Client data/world.js: PLOTS has 3 rows x 2 sides = 6 player plots, each holding HOME_SLOTS
 // (2 rows x PLOT_SLOT.count 6) = 12 ground-floor treasure slots.
 // A room seats one player per plot.

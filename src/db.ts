@@ -46,6 +46,11 @@ export interface PlayerDoc {
   // Total seconds connected, measured by the SERVER clock (WorldRoom.ts flushPlaytime) --
   // never client-reported.
   playTime?: number;
+  // Server clock: last moment this player was connected (heartbeat + disconnect). The gap to the
+  // next join is the time spent offline.
+  lastSeenAt?: Date;
+  // Unclaimed offline time in seconds; paid out (and reset to 0) by the `claimOffline` message.
+  offlineSeconds?: number;
   version: number;
   updatedAt: Date;
 }

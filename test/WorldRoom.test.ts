@@ -283,4 +283,35 @@ describe("WorldRoom", () => {
     await sleep(60);
     assert.ok(errors.includes("serverError"));
   });
+  it("pays 500 cash + 100 strength per offline hour, once", async () => {
+    const hourAgo = new Date(Date.now() - 3600_000);
+    const fake = fakePlayersCollection([baseDoc({ _id: "off", cash: 10, strength: 5, lastSeenAt: hourAgo })]);
+    __setPlayersForTest(fake);
+    const room = await colyseus.createRoom<WorldState>("world", {});
+    const sent = captureSends(room);
+    const c = await colyseus.connectTo(room, { userId: "off", username: "Away" });
+    await sleep(80);
+    const offer = sent.find(([t]) => t === "offlineEarnings")![1];
+    assert.ok(Math.abs(offer.cash - 500) <= 1 && Math.abs(offer.strength - 100) <= 1);
+    const claimed: any[] = [];
+    c.onMessage("offlineClaimed", (m: any) => claimed.push(m));
+    c.send("claimOffline");
+    c.send("claimOffline");
+    await sleep(100);
+    assert.strictEqual(claimed.length, 1);
+    const doc: any = fake.docs.get("off");
+    assert.strictEqual(doc.offlineSeconds, 0);
+    assert.strictEqual(doc.cash, 10 + claimed[0].cash);
+    assert.strictEqual(doc.strength, 5 + claimed[0].strength);
+  });
+
+  it("pays nothing for a short absence", async () => {
+    const fake = fakePlayersCollection([baseDoc({ _id: "brb", lastSeenAt: new Date(Date.now() - 10_000) })]);
+    __setPlayersForTest(fake);
+    const room = await colyseus.createRoom<WorldState>("world", {});
+    const sent = captureSends(room);
+    await colyseus.connectTo(room, { userId: "brb" });
+    await sleep(80);
+    assert.ok(!sent.some(([t]) => t === "offlineEarnings"));
+  });
 });

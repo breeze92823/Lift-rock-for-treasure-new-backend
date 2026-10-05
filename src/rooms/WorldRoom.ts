@@ -14,6 +14,12 @@ import {
   AURA_IDS,
   ARM_IDS,
   TRAINING_KEY_MAX,
+  OFFLINE_CASH_PER_HOUR,
+  OFFLINE_STRENGTH_PER_HOUR,
+  OFFLINE_MIN_SECONDS,
+  OFFLINE_MAX_SECONDS,
+  CASH_MAX,
+  STRENGTH_MAX,
 } from "../constants.js";
 import { getPlayers, type PlayerDoc, type ItemDoc } from "../db.js";
 import { finite, clampInt, sanitizeProgress, sanitizeItem, sanitizePlot } from "../sanitize.js";
@@ -40,6 +46,16 @@ function dedupeOnline(rows: OnlineRow[], stat: LeaderboardStat): OnlineRow[] {
     if (!existing || row[stat] > existing[stat]) byUserId.set(row.userId, row);
   }
   return [...byUserId.values(), ...anonymous];
+}
+
+// What `seconds` of offline time pays. Whole numbers only.
+export function offlineReward(seconds: number) {
+  const hours = Math.min(seconds, OFFLINE_MAX_SECONDS) / 3600;
+  return {
+    seconds,
+    cash: Math.floor(hours * OFFLINE_CASH_PER_HOUR),
+    strength: Math.floor(hours * OFFLINE_STRENGTH_PER_HOUR),
+  };
 }
 
 const AVATAR_MAX_LEN = 4096;
@@ -72,7 +88,38 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   // sessionId -> epoch ms up to which that connection's playtime has already been counted.
   private playTimeMark = new Map<string, number>();
 
+  // sessionIds with a claimOffline in flight, so a double click can never pay twice.
+  private claiming = new Set<string>();
+
   messages = {
+    // Pays out the player's unclaimed offline time. The amount comes from the server's own
+    // record (never the client); the doc is bumped here so a tab closed right after claiming
+    // keeps the reward, and the client adds the same amounts to its local state.
+    claimOffline: async (client: Client) => {
+      const p = this.state.players.get(client.sessionId);
+      const userId = this.userIds.get(client.sessionId);
+      const players = getPlayers();
+      if (!p || !userId || !players || this.claiming.has(client.sessionId)) return;
+      this.claiming.add(client.sessionId);
+      try {
+        const doc = await players.findOne({ _id: userId });
+        const seconds = doc?.offlineSeconds ?? 0;
+        const reward = offlineReward(seconds);
+        if (seconds < OFFLINE_MIN_SECONDS) return;
+        const res = await players.updateOne(
+          { _id: userId, offlineSeconds: seconds },
+          { $set: { offlineSeconds: 0, updatedAt: new Date() }, $inc: { cash: reward.cash, strength: reward.strength } },
+        );
+        if (res && res.modifiedCount === 0) return; // lost a race with another session
+        p.cash = Math.min(CASH_MAX, p.cash + reward.cash);
+        p.strength = Math.min(STRENGTH_MAX, p.strength + reward.strength);
+        client.send("offlineClaimed", { cash: reward.cash, strength: reward.strength });
+      } catch (err) {
+        console.warn("[WorldRoom] claimOffline failed", err);
+      } finally {
+        this.claiming.delete(client.sessionId);
+      }
+    },
     // Position / gait, throttled client-side (~15 Hz).
     move: (client: Client, msg: any) => {
       const p = this.state.players.get(client.sessionId);
@@ -220,7 +267,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     players
       .updateOne(
         { _id: userId },
-        { $inc: { playTime: seconds }, $set: { username: p?.username || "Player", updatedAt: new Date() }, $setOnInsert: { version: 1 } },
+        { $inc: { playTime: seconds }, $set: { username: p?.username || "Player", lastSeenAt: new Date(), updatedAt: new Date() }, $setOnInsert: { version: 1 } },
         { upsert: true },
       )
       .catch((err) => console.warn("[WorldRoom] playtime flush failed", err));
@@ -238,6 +285,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.userIds.delete(sessionId);
     this.plotted.delete(sessionId);
     this.moved.delete(sessionId);
+    this.claiming.delete(sessionId);
   }
 
   onJoin(client: Client, options?: { username?: string; userId?: string; avatar?: string }) {
@@ -332,6 +380,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const live = sanitizeProgress(doc) ?? {};
     this.applyLive(p, live);
 
+    // Time since this account was last connected becomes unclaimed offline earnings.
+    const offline = await this.accrueOffline(userId, doc);
+    if (this.state.players.get(client.sessionId) !== p) return;
+
     client.send("progress", {
       cash: doc.cash ?? 0,
       gems: doc.gems,
@@ -354,6 +406,25 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       homePlot: p.homePlot,
       playTime: p.playTime,
     });
+    if (offline) client.send("offlineEarnings", offline);
+  }
+
+  // Adds the time away since `lastSeenAt` to the saved unclaimed total (capped), stamps the
+  // account as seen now, and returns the pending reward (null when below the minimum).
+  private async accrueOffline(userId: string, doc: PlayerDoc) {
+    const players = getPlayers();
+    if (!userId || !players) return null;
+    const now = Date.now();
+    const away = doc.lastSeenAt ? Math.floor((now - new Date(doc.lastSeenAt).getTime()) / 1000) : 0;
+    const gained = away >= OFFLINE_MIN_SECONDS ? away : 0;
+    const seconds = Math.min(OFFLINE_MAX_SECONDS, (doc.offlineSeconds ?? 0) + gained);
+    try {
+      await players.updateOne({ _id: userId }, { $set: { lastSeenAt: new Date(now), offlineSeconds: seconds } });
+    } catch (err) {
+      console.warn("[WorldRoom] accrueOffline failed", err);
+      return null;
+    }
+    return seconds >= OFFLINE_MIN_SECONDS ? offlineReward(seconds) : null;
   }
 
   // A deliberate `room.leave()` closes with CONSENTED -- drop the player at once. Anything
