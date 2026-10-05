@@ -97,6 +97,7 @@ export function sanitizeProgress(raw: unknown): Partial<PlayerDoc> | null {
   if (typeof raw.equippedArm === "string" && ARM_IDS.includes(raw.equippedArm)) out.equippedArm = raw.equippedArm;
   if (raw.heldItem !== undefined) out.heldItem = sanitizeItem(raw.heldItem);
   if (raw.plotSlots !== undefined) out.plotSlots = sanitizePlotSlots(raw.plotSlots);
+  if (typeof raw.baseUpgraded === "boolean") out.baseUpgraded = raw.baseUpgraded;
   if (raw.discovered !== undefined) out.discovered = sanitizeDiscovered(raw.discovered);
   return out;
 }

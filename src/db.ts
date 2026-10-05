@@ -39,6 +39,8 @@ export interface PlayerDoc {
   homePlot?: number;
   // Home ground-floor slot index (as a string key) -> placed item.
   plotSlots?: Record<string, ItemDoc>;
+  // Home upgraded to the two-storey build (24 slots).
+  baseUpgraded?: boolean;
   // Item names collected at least once (the Index window).
   discovered?: string[];
   // Total seconds connected, measured by the SERVER clock (WorldRoom.ts flushPlaytime) --

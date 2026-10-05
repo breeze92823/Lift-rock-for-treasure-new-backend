@@ -171,6 +171,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (patch.equippedArm !== undefined) p.equippedArm = patch.equippedArm;
     if (patch.heldItem !== undefined) this.setHeld(p, patch.heldItem);
     if (patch.plotSlots !== undefined) this.setPlotSlots(p, patch.plotSlots);
+    if (patch.baseUpgraded !== undefined) p.baseUpgraded = patch.baseUpgraded;
   }
 
   private setPlotSlots(p: PlayerState, slots: Record<string, ItemDoc>) {
@@ -347,6 +348,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       equippedArm: live.equippedArm,
       heldItem: live.heldItem,
       plotSlots: live.plotSlots,
+      baseUpgraded: live.baseUpgraded,
       discovered: live.discovered,
       homePlot: p.homePlot,
       playTime: p.playTime,

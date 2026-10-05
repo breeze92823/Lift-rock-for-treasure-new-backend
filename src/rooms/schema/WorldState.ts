@@ -40,6 +40,7 @@ export const PlayerState = schema(
     // Index into the client's PLOTS, assigned by the server so no two players in a room share one.
     homePlot: t.float64().default(0),
     plotSlots: t.map(PlotItem), // home slot index (string) -> item
+    baseUpgraded: t.boolean().default(false), // home upgraded to the two-storey build; other clients draw this plot accordingly
     cash: t.float64().default(0),
     strength: t.float64().default(0),
     // Total seconds connected (saved total for a signed-in player + this session), server-measured.
