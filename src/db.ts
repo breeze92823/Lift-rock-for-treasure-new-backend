@@ -51,6 +51,13 @@ export interface PlayerDoc {
   lastSeenAt?: Date;
   // Unclaimed offline time in seconds; paid out (and reset to 0) by the `claimOffline` message.
   offlineSeconds?: number;
+  // Onboarding progress (constants.ts TUTORIAL_*): 0..TUTORIAL_DONE_STEP. Only ever moves forward
+  // (WorldRoom.saveProgress uses $max). Docs that predate the field count as finished -- see
+  // resolveTutorialStep in sanitize.ts.
+  tutorialStep?: number;
+  // Name of the Uncommon item picked on the tutorial's loot step, so a resumed tutorial can still
+  // point at it.
+  tutorialItem?: string | null;
   version: number;
   updatedAt: Date;
 }

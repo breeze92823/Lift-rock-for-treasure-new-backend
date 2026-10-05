@@ -4,7 +4,7 @@ import { ColyseusTestServer, boot } from "@colyseus/testing";
 
 import appConfig from "../src/app.config.js";
 import { WorldState } from "../src/rooms/schema/WorldState.js";
-import { sanitizeProgress, sanitizePlotSlots } from "../src/sanitize.js";
+import { sanitizeProgress, sanitizePlotSlots, resolveTutorialStep } from "../src/sanitize.js";
 import { __setPlayersForTest, type PlayerDoc } from "../src/db.js";
 
 // Hand-rolled fake `players` collection implementing only the subset WorldRoom.ts calls:
@@ -22,6 +22,7 @@ function fakePlayersCollection(seed: PlayerDoc[] = []) {
       const base = existing ?? ({ _id: filter._id, ...(update.$setOnInsert ?? {}) } as PlayerDoc);
       const next = { ...base, ...(update.$set ?? {}) } as any;
       for (const [k, v] of Object.entries(update.$inc ?? {})) next[k] = (next[k] ?? 0) + (v as number);
+      for (const [k, v] of Object.entries(update.$max ?? {})) next[k] = Math.max(next[k] ?? -Infinity, v as number);
       docs.set(filter._id, next as PlayerDoc);
     },
     find(_filter: any) {
@@ -214,6 +215,38 @@ describe("WorldRoom", () => {
     assert.deepStrictEqual(progress.inventory, [{ name: "Coal", rarity: "Common", value: 12 }]);
     assert.deepStrictEqual(progress.plotSlots, { 2: { name: "Gem", rarity: "Uncommon", glyph: "G" } });
     assert.deepStrictEqual(progress.discovered, ["Coal", "Gem"]);
+  });
+
+  it("saves the tutorial step forward only, and docs without one count as finished", async () => {
+    const fake = fakePlayersCollection([baseDoc({ _id: "old", cash: 9 }), baseDoc({ _id: "rb", rebirths: 1, tutorialStep: 2 })]);
+    __setPlayersForTest(fake);
+    assert.strictEqual(resolveTutorialStep({}), 18); // legacy doc: never shown the tutorial
+    assert.strictEqual(resolveTutorialStep({ tutorialStep: 5 }), 5);
+    assert.strictEqual(resolveTutorialStep({ tutorialStep: 2, rebirths: 1 }), 8); // a rebirth proves step 7 is behind them
+    assert.strictEqual(sanitizeProgress({ tutorialStep: 99 })!.tutorialStep, 18);
+    assert.strictEqual(sanitizeProgress({ tutorialStep: -3 })!.tutorialStep, 0);
+
+    const room = await colyseus.createRoom<WorldState>("world", {});
+    const sent = captureSends(room);
+    const c = await colyseus.connectTo(room, { userId: "old" });
+    const r = await colyseus.connectTo(room, { userId: "rb" });
+    const n = await colyseus.connectTo(room, { userId: "new" });
+    await sleep(80);
+    const stepFor = (i: number) => sent.filter(([t]) => t === "progress")[i][1].tutorialStep;
+    assert.strictEqual(stepFor(0), 18);
+    assert.strictEqual(stepFor(1), 8);
+
+    n.send("saveProgress", { cash: 1, tutorialStep: 6, tutorialItem: "Gem" });
+    await sleep(60);
+    assert.strictEqual(fake.docs.get("new")!.tutorialStep, 6);
+    assert.strictEqual(fake.docs.get("new")!.tutorialItem, "Gem");
+    n.send("saveProgress", { cash: 2, tutorialStep: 3 }); // stale save must not move it back
+    await sleep(60);
+    assert.strictEqual(fake.docs.get("new")!.tutorialStep, 6);
+    n.send("saveProgress", { cash: 3, tutorialStep: 18 });
+    await sleep(60);
+    assert.strictEqual(fake.docs.get("new")!.tutorialStep, 18);
+    void c; void r;
   });
 
   it("does not load or save progress for guests", async () => {

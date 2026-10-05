@@ -57,6 +57,11 @@ export const ARM_IDS: readonly string[] = [
   "lava", "emerald", "glitch", "bedrock", "nuclear", "disco",
 ];
 
+// Client data/tutorial.js: the onboarding runs steps 0..TUTORIAL_DONE_STEP (18 = finished). The rebirth
+// is step 7, so a saved rebirth proves the player is at least on step 8.
+export const TUTORIAL_REBIRTH_STEP = 7;
+export const TUTORIAL_DONE_STEP = 18;
+
 // Training spot keys (client data/world.js TRAINING_SPOTS) are relayed as opaque short strings.
 export const TRAINING_KEY_MAX = 32;
 

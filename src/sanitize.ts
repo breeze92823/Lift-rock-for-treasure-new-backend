@@ -1,6 +1,6 @@
 import {
   CASH_MAX, STRENGTH_MAX, REBIRTH_MAX, LEVEL_MAX, UPGRADE_LEVEL_MAX, INVENTORY_MAX, DISCOVERED_MAX,
-  ITEM_VALUE_MAX, TEXT_MAX, RARITIES, AURA_IDS, ARM_IDS, PLOT_COUNT, PLOT_SLOT_COUNT,
+  ITEM_VALUE_MAX, TEXT_MAX, TUTORIAL_DONE_STEP, TUTORIAL_REBIRTH_STEP, RARITIES, AURA_IDS, ARM_IDS, PLOT_COUNT, PLOT_SLOT_COUNT,
 } from "./constants.js";
 import type { ItemDoc, LootDoc, PlayerDoc } from "./db.js";
 
@@ -72,6 +72,15 @@ export function sanitizePlot(raw: unknown): number | null {
   return finite(raw) && Number.isInteger(raw) && raw >= 0 && raw < PLOT_COUNT ? raw : null;
 }
 
+// What loadProgress sends down as tutorialStep. A doc predating the field reads as finished (those
+// players were never shown the tutorial); otherwise the stored step, raised to what the stats prove
+// (a saved rebirth means the rebirth step is behind them). Never lowers a stored step.
+export function resolveTutorialStep(doc: Partial<PlayerDoc>): number {
+  const stored = typeof doc.tutorialStep === "number" && Number.isFinite(doc.tutorialStep) ? doc.tutorialStep : TUTORIAL_DONE_STEP;
+  const proven = (doc.rebirths ?? 0) >= 1 ? TUTORIAL_REBIRTH_STEP + 1 : 0;
+  return Math.min(TUTORIAL_DONE_STEP, Math.max(0, Math.floor(Math.max(stored, proven))));
+}
+
 // The game is client-authoritative -- no server-side gameplay validation. What IS enforced:
 // shape and bounds, so a malformed payload can never corrupt this player's own Mongo document.
 // A forged number can only ever affect the sender's own save. `homePlot` is deliberately absent:
@@ -99,5 +108,7 @@ export function sanitizeProgress(raw: unknown): Partial<PlayerDoc> | null {
   if (raw.plotSlots !== undefined) out.plotSlots = sanitizePlotSlots(raw.plotSlots);
   if (typeof raw.baseUpgraded === "boolean") out.baseUpgraded = raw.baseUpgraded;
   if (raw.discovered !== undefined) out.discovered = sanitizeDiscovered(raw.discovered);
+  if (finite(raw.tutorialStep)) out.tutorialStep = clampInt(raw.tutorialStep, TUTORIAL_DONE_STEP);
+  if (raw.tutorialItem !== undefined) out.tutorialItem = text(raw.tutorialItem);
   return out;
 }

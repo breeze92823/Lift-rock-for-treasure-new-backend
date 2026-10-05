@@ -22,7 +22,7 @@ import {
   STRENGTH_MAX,
 } from "../constants.js";
 import { getPlayers, type PlayerDoc, type ItemDoc } from "../db.js";
-import { finite, clampInt, sanitizeProgress, sanitizeItem, sanitizePlot } from "../sanitize.js";
+import { finite, clampInt, sanitizeProgress, sanitizeItem, sanitizePlot, resolveTutorialStep } from "../sanitize.js";
 
 // One board per stat, matching the leaderboards in the hub (client store/useLeaderboardStore.js:
 // cash, strength, playTime).
@@ -168,13 +168,17 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (!userId) return;
       const players = getPlayers();
       if (!players) return; // Mongo unset/unreachable -- degrade silently
+      // The tutorial step only ever moves forward ($max), so a stale or replayed save can never
+      // bring a finished tutorial back.
+      const { tutorialStep, ...rest } = patch;
       try {
         await players.updateOne(
           { _id: userId },
           {
             // Display name comes from this connection's own PlayerState, not `msg`; homePlot is
             // the server-assigned one.
-            $set: { ...patch, homePlot: p.homePlot, username: p.username || "Player", updatedAt: new Date() },
+            $set: { ...rest, homePlot: p.homePlot, username: p.username || "Player", updatedAt: new Date() },
+            ...(tutorialStep !== undefined && { $max: { tutorialStep } }),
             $setOnInsert: { version: 1 },
           },
           { upsert: true },
@@ -403,6 +407,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       plotSlots: live.plotSlots,
       baseUpgraded: live.baseUpgraded,
       discovered: live.discovered,
+      tutorialStep: resolveTutorialStep(doc),
+      tutorialItem: doc.tutorialItem ?? null,
       homePlot: p.homePlot,
       playTime: p.playTime,
     });
