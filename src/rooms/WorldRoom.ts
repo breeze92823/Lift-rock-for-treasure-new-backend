@@ -100,6 +100,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (finite(msg?.level)) p.level = clampInt(msg.level, LEVEL_MAX, 1);
       if (finite(msg?.rebirths)) p.rebirths = clampInt(msg.rebirths, REBIRTH_MAX);
       if (msg && "heldItem" in msg) this.setHeld(p, sanitizeItem(msg.heldItem));
+      if (typeof msg?.baseUpgraded === "boolean") p.baseUpgraded = msg.baseUpgraded;
     },
     // Bloxity avatar JSON; sent on connect and whenever the portal reports a change.
     setAvatar: (client: Client, msg: { avatar?: string }) => {

@@ -11,7 +11,7 @@ export const PLAYTIME_FLUSH_MS = 30_000;
 // (2 rows x PLOT_SLOT.count 6) = 12 ground-floor treasure slots.
 // A room seats one player per plot.
 export const PLOT_COUNT = 6;
-export const PLOT_SLOT_COUNT = 12;
+export const PLOT_SLOT_COUNT = 24; // 12 ground + 12 upper-deck (after the Base Upgrade)
 export const ROOM_MAX_CLIENTS = PLOT_COUNT;
 
 // Client data/world.js plotSpawn(i): PLOTS alternate side -1/+1 over PLOT_ROWS_Z, spawn at
