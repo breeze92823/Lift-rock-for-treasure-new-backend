@@ -216,6 +216,21 @@ describe("WorldRoom", () => {
     assert.deepStrictEqual(progress.discovered, ["Coal", "Gem"]);
   });
 
+  it("does not load or save progress for guests", async () => {
+    const fake = fakePlayersCollection([baseDoc({ _id: "guest-abc", cash: 777 })]);
+    __setPlayersForTest(fake);
+    const room = await colyseus.createRoom<WorldState>("world", {});
+    const sent = captureSends(room);
+    const c = await colyseus.connectTo(room, { userId: "guest-abc", username: "Guesty" });
+    await sleep(60);
+    assert.ok(sent.some(([t]) => t === "noProgress")); // ignores the doc, starts from defaults
+    c.send("saveProgress", { cash: 5 });
+    await sleep(60);
+    assert.strictEqual(fake.docs.get("guest-abc")!.cash, 777); // untouched
+    assert.strictEqual(fake.docs.size, 1);
+    assert.strictEqual(room.state.players.get(c.sessionId)!.cash, 5); // live value still shown
+  });
+
   it("evicts a second connection of the same account", async () => {
     __setPlayersForTest(fakePlayersCollection([baseDoc({ _id: "u1", cash: 5, homePlot: 3, username: "Ann" })]));
     const room = await colyseus.createRoom<WorldState>("world", {});

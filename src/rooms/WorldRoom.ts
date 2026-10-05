@@ -8,6 +8,7 @@ import {
   PLOT_COUNT,
   ROOM_MAX_CLIENTS,
   plotSpawn,
+  GUEST_ID_PREFIX,
   LEVEL_MAX,
   REBIRTH_MAX,
   AURA_IDS,
@@ -248,10 +249,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     void this.refreshLeaderboard();
   }
 
-  // Client-trusted user id. A forged id can only read/overwrite the SENDER's own save (there is
+  // Client-trusted Bloxity user id (guest ids are dropped, see GUEST_ID_PREFIX). A forged id can only read/overwrite the SENDER's own save (there is
   // no cross-player read in `saveProgress`). Called from both onJoin and `identify`.
   private setUserId(client: Client, p: PlayerState, raw: string) {
-    const userId = typeof raw === "string" ? raw.slice(0, 128) : "";
+    let userId = typeof raw === "string" ? raw.slice(0, 128) : "";
+    // Guests (client-made `guest-...` ids) get no identity: nothing is loaded or saved for them.
+    if (userId.startsWith(GUEST_ID_PREFIX)) userId = "";
     const prev = this.userIds.get(client.sessionId) || "";
     if (userId === prev && this.plotted.has(client.sessionId)) return; // no change -- e.g. a username-only identify
 

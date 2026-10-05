@@ -52,3 +52,7 @@ export const ARM_IDS: readonly string[] = [
 
 // Training spot keys (client data/world.js TRAINING_SPOTS) are relayed as opaque short strings.
 export const TRAINING_KEY_MAX = 32;
+
+// The client's per-browser fallback id for players who are not signed in to Bloxity
+// (systems/net.js localGuestId). Guests are never persisted.
+export const GUEST_ID_PREFIX = "guest-";
