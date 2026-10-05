@@ -8,10 +8,9 @@ export const LEADERBOARD_ROWS = 10;
 export const PLAYTIME_FLUSH_MS = 30_000;
 
 // Client data/world.js: PLOTS has 3 rows x 2 sides = 6 player plots, each holding HOME_SLOTS
-// (2 rows x PLOT_SLOT.count 6) = 12 ground-floor treasure slots. A room seats one player per plot.
+// (2 rows x PLOT_SLOT.count 6) = 12 ground-floor treasure slots..
 export const PLOT_COUNT = 6;
 export const PLOT_SLOT_COUNT = 12;
-export const ROOM_MAX_CLIENTS = PLOT_COUNT;
 
 // Upper bounds for saved values, so a forged payload cannot push a bogus number onto the
 // leaderboards. Generous ceilings, not game rules.

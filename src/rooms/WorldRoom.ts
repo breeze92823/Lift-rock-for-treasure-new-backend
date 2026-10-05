@@ -6,7 +6,6 @@ import {
   LEADERBOARD_ROWS,
   PLAYTIME_FLUSH_MS,
   PLOT_COUNT,
-  ROOM_MAX_CLIENTS,
   LEVEL_MAX,
   REBIRTH_MAX,
   AURA_IDS,
@@ -48,13 +47,12 @@ function sanitizeAvatar(raw: unknown): string {
 
 /**
  * Room every client joins via `client.joinOrCreate("world", { userId, username, avatar })`.
- * Seats one player per home plot (PLOT_COUNT); extra players are put in a fresh room.
+ * Each player gets a home plot (PLOT_COUNT of them); beyond that, plots are shared.
  * Clients report their state (the game is client-authoritative); this room stores it,
  * relays poses/appearance/plot contents to the others and broadcasts the leaderboards.
  */
 export class WorldRoom extends Room<{ state: WorldState }> {
   state = new WorldState();
-  maxClients = ROOM_MAX_CLIENTS;
 
   // sessionId -> user id (Bloxity id or client guest id). Deliberately NOT part of WorldState:
   // it only gates this room's own Mongo reads/writes.
@@ -183,15 +181,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   // Lowest free plot, preferring `wanted` (the plot saved on the player's document) if nobody
-  // else in this room holds it. maxClients == PLOT_COUNT, so one is always free.
+  // else in this room holds it. The room has no player cap, so once all plots are taken the
+  // least-shared one is reused.
   private claimPlot(sessionId: string, wanted: number | null): number {
-    const taken = new Set<number>();
+    const counts = new Array<number>(PLOT_COUNT).fill(0);
     this.state.players.forEach((other, sid) => {
-      if (sid !== sessionId && this.plotted.has(sid)) taken.add(other.homePlot);
+      if (sid !== sessionId && this.plotted.has(sid)) counts[other.homePlot]++;
     });
-    if (wanted !== null && !taken.has(wanted)) return wanted;
-    for (let i = 0; i < PLOT_COUNT; i++) if (!taken.has(i)) return i;
-    return 0;
+    if (wanted !== null && counts[wanted] === 0) return wanted;
+    return counts.indexOf(Math.min(...counts));
   }
 
   // Adds the seconds elapsed since this session's last mark to its live playTime and, for a

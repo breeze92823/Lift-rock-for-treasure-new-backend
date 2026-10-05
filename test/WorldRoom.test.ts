@@ -152,7 +152,7 @@ describe("WorldRoom", () => {
     assert.strictEqual(s2.x, 1.5); // NaN ignored
   });
 
-  it("assigns every player a distinct plot and caps the room at six", async () => {
+  it("assigns every player a distinct plot and reuses plots beyond six", async () => {
     const room = await colyseus.createRoom<WorldState>("world", {});
     const sent = captureSends(room);
     for (let i = 0; i < 6; i++) await colyseus.connectTo(room, { userId: `u${i}`, username: `P${i}` });
@@ -160,7 +160,9 @@ describe("WorldRoom", () => {
     const plots = sent.filter(([t]) => t === "noProgress").map(([, m]) => m.homePlot);
     assert.strictEqual(plots.length, 6);
     assert.deepStrictEqual([...plots].sort(), [0, 1, 2, 3, 4, 5]);
-    await assert.rejects(colyseus.connectTo(room, { userId: "u7" }));
+    await colyseus.connectTo(room, { userId: "u7" }); // no player cap: the 7th shares a plot
+    await sleep(60);
+    assert.strictEqual(room.state.players.size, 7);
   });
 
   it("saves progress, keeps the plot and returns everything on the next join", async () => {
